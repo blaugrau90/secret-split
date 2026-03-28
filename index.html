@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecretSplit</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Dark theme (Forest + Ocean) — default ── */
+    :root {
+      --bg: #090d12;
+      --surface: rgba(255,255,255,0.05);
+      --surface-solid: #111820;
+      --border: rgba(255,255,255,0.10);
+      --border-solid: rgba(255,255,255,0.12);
+      --accent1: #059669;
+      --accent2: #0d9488;
+      --text: #e8fdf8;
+      --text-muted: #5fa090;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --info: #0d9488;
+      --radius: 12px;
+      --card-shadow: none;
+    }
+
+    /* ── Light theme (Forest Green) ── */
+    :root[data-theme="light"] {
+      --bg: #f0fdf9;
+      --surface: rgba(255,255,255,0.85);
+      --surface-solid: #ffffff;
+      --border: rgba(0,0,0,0.10);
+      --border-solid: rgba(0,0,0,0.12);
+      --accent1: #059669;
+      --accent2: #0f766e;
+      --text: #0c1f1a;
+      --text-muted: #3d7068;
+      --success: #059669;
+      --warning: #d97706;
+      --error: #dc2626;
+      --info: #0f766e;
+      --card-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    /* ── Auto system preference ── */
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme]) {
+        --bg: #f0fdf9;
+        --surface: rgba(255,255,255,0.85);
+        --surface-solid: #ffffff;
+        --border: rgba(0,0,0,0.10);
+        --border-solid: rgba(0,0,0,0.12);
+        --accent1: #059669;
+        --accent2: #0f766e;
+        --text: #0c1f1a;
+        --text-muted: #3d7068;
+        --success: #059669;
+        --warning: #d97706;
+        --error: #dc2626;
+        --info: #0f766e;
+        --card-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      }
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* Background blobs */
+    .bg-blobs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15; }
+    .blob-1 { width: 600px; height: 600px; background: var(--accent1); top: -200px; left: -200px; }
+    .blob-2 { width: 500px; height: 500px; background: var(--accent2); bottom: -150px; right: -150px; }
+    .blob-3 { width: 400px; height: 400px; background: var(--accent1); top: 50%; left: 60%; transform: translate(-50%,-50%); }
+
+    /* Layout */
+    .container { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; padding: 24px 16px 80px; }
+
+    /* Header */
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-icon { font-size: 32px; line-height: 1; }
+    .logo-text h1 {
+      font-size: 24px; font-weight: 700;
+      background: linear-gradient(135deg, var(--accent1), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      line-height: 1;
+    }
+    .logo-text p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Header controls */
+    .header-controls { display: flex; align-items: center; gap: 8px; }
+
+    /* Theme toggle */
+    .theme-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 100px; padding: 8px 10px; cursor: pointer;
+      color: var(--text); font-size: 16px; transition: all 0.2s; line-height: 1;
+    }
+    .theme-btn:hover { background: var(--border); }
+
+    /* Language toggle */
+    .lang-toggle { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 100px; padding: 4px; gap: 2px; }
+    .lang-btn {
+      background: none; border: none; color: var(--text-muted); font-size: 13px;
+      padding: 6px 12px; border-radius: 100px; cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .lang-btn.active { background: linear-gradient(135deg, var(--accent1), var(--accent2)); color: #fff; }
+
+    /* Tab bar */
+    .tabs {
+      display: flex; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 4px; margin-bottom: 28px; backdrop-filter: blur(16px);
+    }
+    .tab-btn {
+      flex: 1; background: none; border: none; color: var(--text-muted); font-size: 15px;
+      font-weight: 500; padding: 12px; border-radius: calc(var(--radius) - 4px); cursor: pointer; transition: all 0.2s;
+    }
+    .tab-btn.active { background: linear-gradient(135deg, var(--accent1), var(--accent2)); color: #fff; }
+
+    /* Card */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; backdrop-filter: blur(16px);
+      margin-bottom: 16px; box-shadow: var(--card-shadow);
+    }
+    .card-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px 24px;
+      text-align: center; cursor: pointer; transition: all 0.2s; position: relative; margin-bottom: 12px;
+    }
+    .dropzone:hover, .dropzone.drag-over {
+      border-color: var(--accent1); background: rgba(5,150,105,0.08);
+      transform: scale(1.01); box-shadow: 0 0 24px rgba(5,150,105,0.25);
+    }
+    .dropzone-icon { font-size: 32px; margin-bottom: 8px; }
+    .dropzone-text { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+    .dropzone-text strong { color: var(--accent2); }
+    .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .file-selected {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      background: rgba(5,150,105,0.1); border-radius: 8px; margin-bottom: 12px;
+      font-size: 13px; color: var(--accent1);
+    }
+
+    /* Share config */
+    .share-row { display: flex; gap: 16px; margin-bottom: 16px; }
+    .input-group { flex: 1; }
+    label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    input[type="number"], input[type="text"], input[type="password"] {
+      width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 14px; padding: 10px 12px;
+      outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    :root[data-theme="light"] input[type="number"],
+    :root[data-theme="light"] input[type="text"],
+    :root[data-theme="light"] input[type="password"] { background: rgba(0,0,0,0.04); }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme]) input[type="number"],
+      :root:not([data-theme]) input[type="text"],
+      :root:not([data-theme]) input[type="password"] { background: rgba(0,0,0,0.04); }
+    }
+    input:focus { border-color: var(--accent1); box-shadow: 0 0 0 3px rgba(5,150,105,0.2); }
+    input::placeholder { color: var(--text-muted); }
+
+    /* Trustee rows */
+    .trustee-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+    .trustee-row { display: flex; align-items: center; gap: 8px; }
+    .trustee-index {
+      width: 28px; height: 28px; border-radius: 50%; background: rgba(5,150,105,0.2);
+      color: var(--accent1); font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+
+    /* Validation messages */
+    .validation-messages { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+    .msg { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4; }
+    .msg-error   { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.25);  color: var(--error); }
+    .msg-warning { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25); color: var(--warning); }
+    .msg-info    { background: rgba(5,150,105,0.12);  border: 1px solid rgba(5,150,105,0.25);  color: var(--info); }
+    .msg-success { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25); color: var(--success); }
+
+    /* Pushover */
+    .pushover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px; }
+    .pushover-link { font-size: 12px; color: var(--accent2); text-decoration: none; }
+    .pushover-link:hover { text-decoration: underline; }
+
+    /* Main button */
+    .btn-primary {
+      width: 100%; background: linear-gradient(135deg, var(--accent1), var(--accent2));
+      border: none; border-radius: var(--radius); color: #fff; font-size: 16px;
+      font-weight: 600; padding: 16px; cursor: pointer; transition: all 0.2s; margin-top: 4px;
+    }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(5,150,105,0.4); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Progress bar */
+    .progress-wrap { margin: 16px 0; display: none; }
+    .progress-wrap.visible { display: block; }
+    .progress-label { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--accent1); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress-bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent1), var(--accent2)); animation: progress-indeterminate 1.5s ease-in-out infinite; transform-origin: left; }
+    @keyframes progress-indeterminate {
+      0%   { transform: translateX(-100%) scaleX(0.5); }
+      50%  { transform: translateX(50%)   scaleX(0.8); }
+      100% { transform: translateX(200%)  scaleX(0.5); }
+    }
+
+    /* Results */
+    .results-area { display: none; margin-top: 20px; }
+    .results-area.visible { display: block; }
+    .download-banner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25);
+      border-radius: var(--radius); margin-bottom: 12px;
+    }
+    .download-banner-info { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--success); }
+    .btn-download { background: var(--success); border: none; border-radius: 8px; color: #fff; font-size: 13px; font-weight: 600; padding: 8px 16px; cursor: pointer; transition: all 0.2s; }
+    .btn-download:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+    /* Download All button */
+    .download-all-banner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px;
+      background: linear-gradient(135deg, rgba(5,150,105,0.15), rgba(245,158,11,0.15));
+      border: 1px solid rgba(5,150,105,0.3);
+      border-radius: var(--radius); margin-bottom: 20px;
+    }
+    .download-all-info { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; color: var(--text); }
+    .download-all-info .all-desc { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+    .btn-download-all {
+      background: linear-gradient(135deg, var(--accent1), var(--accent2));
+      border: none; border-radius: 8px; color: #fff; font-size: 13px; font-weight: 700;
+      padding: 10px 20px; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-download-all:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(5,150,105,0.4); }
+
+    /* Share cards */
+    .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 12px; }
+    .share-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+    .share-card {
+      background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--accent1);
+      border-radius: var(--radius); padding: 20px; backdrop-filter: blur(16px);
+      display: flex; flex-direction: column; gap: 10px; box-shadow: var(--card-shadow);
+      animation: fadeInUp 0.4s ease both;
+    }
+    .share-card:nth-child(1)  { animation-delay: 0.05s; }
+    .share-card:nth-child(2)  { animation-delay: 0.10s; }
+    .share-card:nth-child(3)  { animation-delay: 0.15s; }
+    .share-card:nth-child(4)  { animation-delay: 0.20s; }
+    .share-card:nth-child(5)  { animation-delay: 0.25s; }
+    .share-card:nth-child(6)  { animation-delay: 0.30s; }
+    .share-card:nth-child(7)  { animation-delay: 0.35s; }
+    .share-card:nth-child(8)  { animation-delay: 0.40s; }
+    .share-card:nth-child(9)  { animation-delay: 0.45s; }
+    .share-card:nth-child(10) { animation-delay: 0.50s; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .share-card-header { display: flex; align-items: center; gap: 8px; }
+    .share-badge { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--accent1), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .share-card-name { font-size: 15px; font-weight: 600; }
+    .share-card-instr { font-size: 12px; color: var(--text-muted); line-height: 1.4; flex: 1; }
+    .share-card-actions { display: flex; flex-direction: column; gap: 6px; }
+    .btn-share-zip {
+      background: linear-gradient(135deg, var(--accent1), var(--accent2));
+      border: none; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 700;
+      padding: 8px 12px; cursor: pointer; transition: all 0.2s; width: 100%;
+    }
+    .btn-share-zip:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .btn-share-only {
+      background: none; border: none; color: var(--text-muted); font-size: 11px;
+      cursor: pointer; padding: 2px 0; text-align: center; transition: color 0.2s;
+      text-decoration: underline; text-underline-offset: 2px;
+    }
+    .btn-share-only:hover { color: var(--text); }
+
+    /* Decrypt loaded shares */
+    .loaded-shares { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .loaded-share-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
+    .share-index-badge { background: rgba(5,150,105,0.2); color: var(--accent1); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+    .share-count-status { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; margin-top: 10px; }
+    .share-count-status.enough   { background: rgba(16,185,129,0.1);  border: 1px solid rgba(16,185,129,0.25);  color: var(--success); }
+    .share-count-status.need-more { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); color: var(--warning); }
+
+    /* Decrypt success */
+    .decrypt-success { display: none; text-align: center; padding: 32px 16px; }
+    .decrypt-success.visible { display: block; }
+    .success-icon { font-size: 56px; margin-bottom: 16px; }
+    .success-filename { font-size: 18px; font-weight: 600; margin-bottom: 6px; color: var(--success); }
+    .success-msg { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
+    .btn-download-lg { background: var(--success); border: none; border-radius: var(--radius); color: #fff; font-size: 15px; font-weight: 600; padding: 14px 32px; cursor: pointer; transition: all 0.2s; }
+    .btn-download-lg:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+    @media (max-width: 480px) {
+      .pushover-grid { grid-template-columns: 1fr; }
+      .share-row { flex-direction: column; gap: 12px; }
+      .download-banner { flex-direction: column; gap: 12px; align-items: flex-start; }
+      .download-all-banner { flex-direction: column; gap: 12px; align-items: flex-start; }
+      .header-controls { gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div class="container">
+    <header>
+      <div class="logo">
+        <div class="logo-icon">🔐</div>
+        <div class="logo-text">
+          <h1>SecretSplit</h1>
+          <p data-i18n="header.tagline">Zero-knowledge file encryption with Shamir's Secret Sharing</p>
+        </div>
+      </div>
+      <div class="header-controls">
+        <button id="btn-theme" class="theme-btn" title="Toggle theme">🌙</button>
+        <div class="lang-toggle">
+          <button class="lang-btn active" data-lang="en">🇬🇧 EN</button>
+          <button class="lang-btn" data-lang="de">🇩🇪 DE</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="encrypt" data-i18n="tabs.encrypt">Encrypt &amp; Split</button>
+      <button class="tab-btn" data-tab="decrypt" data-i18n="tabs.decrypt">Decrypt &amp; Reconstruct</button>
+    </div>
+
+    <!-- ═══════════════ ENCRYPT SECTION ═══════════════ -->
+    <div id="encrypt-section">
+
+      <!-- File drop zone -->
+      <div class="dropzone" id="enc-dropzone">
+        <input type="file" id="enc-file-input">
+        <div class="dropzone-icon">📁</div>
+        <div class="dropzone-text">
+          <strong data-i18n="encrypt.dropzone.action">Drop file here</strong><br>
+          <span data-i18n="encrypt.dropzone.hint">or click to select — any file type</span>
+        </div>
+      </div>
+      <div id="enc-file-display" class="file-selected" style="display:none">
+        <span>📄</span><span id="enc-file-name"></span>
+      </div>
+
+      <!-- Share configuration -->
+      <div class="card">
+        <div class="card-title">⚙️ <span data-i18n="encrypt.shares.title">Share Configuration</span></div>
+        <div class="share-row">
+          <div class="input-group">
+            <label for="inp-k" data-i18n="encrypt.shares.kLabel">Required Shares (k)</label>
+            <input type="number" id="inp-k" value="2" min="1" max="20">
+          </div>
+          <div class="input-group">
+            <label for="inp-n" data-i18n="encrypt.shares.nLabel">Total Shares (n)</label>
+            <input type="number" id="inp-n" value="3" min="1" max="20">
+          </div>
+        </div>
+        <div class="section-title" data-i18n="encrypt.trustees.label">Trustees</div>
+        <div class="trustee-list" id="trustee-list"></div>
+        <div class="validation-messages" id="validation-messages"></div>
+      </div>
+
+      <!-- Pushover -->
+      <div class="card">
+        <div class="card-title">
+          🔔 <span data-i18n="encrypt.pushover.title">Pushover Notifications</span>
+          <span style="font-size:12px;color:var(--text-muted);font-weight:400" data-i18n="common.optional">(optional)</span>
+        </div>
+        <div class="pushover-grid">
+          <div class="input-group">
+            <label for="inp-pushover-user" data-i18n="encrypt.pushover.userKey">User Key</label>
+            <input type="password" id="inp-pushover-user" placeholder="ukXXXXXXXX…">
+          </div>
+          <div class="input-group">
+            <label for="inp-pushover-token" data-i18n="encrypt.pushover.appToken">App Token</label>
+            <input type="password" id="inp-pushover-token" placeholder="aXXXXXXXX…">
+          </div>
+        </div>
+        <a href="https://pushover.net" target="_blank" rel="noopener" class="pushover-link" data-i18n="encrypt.pushover.link">Get credentials at pushover.net ↗</a>
+      </div>
+
+      <!-- Encrypt button -->
+      <button class="btn-primary" id="btn-encrypt" disabled data-i18n="encrypt.button">Encrypt &amp; Generate Shares</button>
+
+      <!-- Progress -->
+      <div class="progress-wrap" id="enc-progress">
+        <div class="progress-label">
+          <div class="spinner"></div>
+          <span data-i18n="progress.encrypting">Encrypting…</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+      </div>
+
+      <!-- Results -->
+      <div class="results-area" id="enc-results">
+        <div class="download-banner">
+          <div class="download-banner-info">
+            <span>✅</span>
+            <span id="enc-download-name"></span>
+          </div>
+          <button class="btn-download" id="btn-enc-download" data-i18n="common.download">Download</button>
+        </div>
+        <div class="download-all-banner">
+          <div class="download-all-info">
+            <span>📦</span>
+            <div>
+              <div data-i18n="encrypt.results.downloadAll">Download All Packages</div>
+              <div class="all-desc" data-i18n="encrypt.results.downloadAllDesc">One ZIP per trustee — each contains their share + the encrypted file</div>
+            </div>
+          </div>
+          <button class="btn-download-all" id="btn-download-all" data-i18n="encrypt.results.downloadAll">Download All Packages</button>
+        </div>
+        <div class="section-title" data-i18n="encrypt.results.sharesTitle">Share Packages</div>
+        <div class="share-cards" id="share-cards-container"></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ DECRYPT SECTION ═══════════════ -->
+    <div id="decrypt-section" style="display:none">
+
+      <!-- Encrypted file -->
+      <div class="card">
+        <div class="card-title">🔒 <span data-i18n="decrypt.encFile.title">Encrypted File</span></div>
+        <div class="dropzone" id="dec-enc-dropzone">
+          <input type="file" id="dec-enc-file-input" accept=".enc">
+          <div class="dropzone-icon">🔒</div>
+          <div class="dropzone-text">
+            <strong data-i18n="decrypt.encFile.action">Drop .enc file here</strong><br>
+            <span data-i18n="decrypt.encFile.hint">or click to select</span>
+          </div>
+        </div>
+        <div id="dec-enc-display" class="file-selected" style="display:none">
+          <span>🔒</span><span id="dec-enc-name"></span>
+        </div>
+      </div>
+
+      <!-- Share files -->
+      <div class="card">
+        <div class="card-title">🗝️ <span data-i18n="decrypt.shares.title">Share Files</span></div>
+        <div class="dropzone" id="dec-share-dropzone">
+          <input type="file" id="dec-share-input" accept=".txt,.json" multiple>
+          <div class="dropzone-icon">🗝️</div>
+          <div class="dropzone-text">
+            <strong data-i18n="decrypt.shares.action">Drop share files here</strong><br>
+            <span data-i18n="decrypt.shares.hint">or click to select — multiple allowed</span>
+          </div>
+        </div>
+
+        <div id="loaded-shares-container" style="display:none">
+          <div class="loaded-shares" id="loaded-shares-list"></div>
+          <div class="share-count-status" id="share-count-status"></div>
+        </div>
+        <div class="validation-messages" id="dec-validation-messages"></div>
+      </div>
+
+      <!-- Decrypt button -->
+      <button class="btn-primary" id="btn-decrypt" disabled data-i18n="decrypt.button">Decrypt File</button>
+
+      <!-- Progress -->
+      <div class="progress-wrap" id="dec-progress">
+        <div class="progress-label">
+          <div class="spinner"></div>
+          <span data-i18n="progress.decrypting">Decrypting…</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+      </div>
+
+      <!-- Success -->
+      <div class="decrypt-success" id="dec-success">
+        <div class="success-icon">✅</div>
+        <div class="success-filename" id="dec-success-filename"></div>
+        <div class="success-msg" data-i18n="decrypt.success.msg">File decrypted successfully</div>
+        <button class="btn-download-lg" id="btn-dec-download" data-i18n="common.download">Download</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ============================================================
+  // 1. GF(256) Tables  (primitive polynomial 0x11b, generator α=3)
+  // ============================================================
+  const gfExp = new Uint8Array(512);
+  const gfLog = new Uint8Array(256);
+  {
+    let x = 1;
+    for (let i = 0; i < 255; i++) {
+      gfExp[i] = x; gfLog[x] = i;
+      // Generator α=3 (=x+1): multiply x by 3 = xtime(x) XOR x
+      const xt = ((x << 1) ^ ((x & 0x80) ? 0x1b : 0)) & 0xff;
+      x = xt ^ x;
+    }
+    for (let i = 255; i < 512; i++) gfExp[i] = gfExp[i - 255];
+  }
+  const gfMul = (a, b) => (a && b) ? gfExp[gfLog[a] + gfLog[b]] : 0;
+  const gfDiv = (a, b) => a ? gfExp[(gfLog[a] - gfLog[b] + 255) % 255] : 0;
+
+  // ============================================================
+  // 2. i18n
+  // ============================================================
+  const i18n = {
+    en: {
+      header: { tagline: "Zero-knowledge file encryption with Shamir's Secret Sharing" },
+      tabs:   { encrypt: "Encrypt & Split", decrypt: "Decrypt & Reconstruct" },
+      common: { optional: "(optional)", download: "Download" },
+      encrypt: {
+        dropzone: { action: "Drop file here", hint: "or click to select — any file type" },
+        shares:   { title: "Share Configuration", kLabel: "Required Shares (k)", nLabel: "Total Shares (n)" },
+        trustees: { label: "Trustees", placeholder: "Trustee name" },
+        pushover: { title: "Pushover Notifications", userKey: "User Key", appToken: "App Token", link: "Get credentials at pushover.net ↗" },
+        button:   "Encrypt & Generate Shares",
+        results:  {
+          sharesTitle:     "Share Packages",
+          giveFile:        "Give this package to {trustee}",
+          downloadAll:     "Download All Packages",
+          downloadAllDesc: "One ZIP per trustee — each contains their share + the encrypted file",
+          downloadPackage: "Download Package (ZIP)",
+          shareOnly:       "Share file only"
+        }
+      },
+      decrypt: {
+        encFile: { title: "Encrypted File", action: "Drop .enc file here", hint: "or click to select" },
+        shares:  { title: "Share Files", action: "Drop share files here", hint: "or click to select — multiple allowed" },
+        status:  { enough: "{loaded} of {k} required shares loaded — ready to decrypt", needMore: "{loaded} of {k} required — need {more} more" },
+        button:  "Decrypt File",
+        success: { msg: "File decrypted successfully" }
+      },
+      progress: { encrypting: "Encrypting…", decrypting: "Decrypting…" },
+      validation: {
+        noFile:              "Please select a file to encrypt.",
+        kGtN:                "k cannot be greater than n.",
+        k1:                  "Warning: k = 1 means any single share alone can decrypt the file.",
+        nGt10:               "Warning: more than 10 shares is unusual.",
+        kEqN:                "All {n} shares will be required to decrypt.",
+        dupTrustee:          "Trustee names must be unique.",
+        emptyTrustee:        "All trustee names must be filled in.",
+        decNoEnc:            "Please upload the encrypted .enc file.",
+        decNotEnough:        "Need {k} shares to decrypt — {loaded} loaded so far.",
+        decInconsistentMeta: "Share files have mismatched salt or IV — they may not belong to the same encryption.",
+        decParseFail:        "Could not parse share file: {name}"
+      }
+    },
+    de: {
+      header: { tagline: "Zero-Wissen-Dateiverschlüsselung mit Shamir's Secret Sharing" },
+      tabs:   { encrypt: "Verschlüsseln & Aufteilen", decrypt: "Entschlüsseln & Rekonstruieren" },
+      common: { optional: "(optional)", download: "Herunterladen" },
+      encrypt: {
+        dropzone: { action: "Datei hier ablegen", hint: "oder klicken — jedes Dateiformat" },
+        shares:   { title: "Shares konfigurieren", kLabel: "Benötigte Shares (k)", nLabel: "Gesamte Shares (n)" },
+        trustees: { label: "Treuhänder", placeholder: "Name des Treuhänders" },
+        pushover: { title: "Pushover-Benachrichtigungen", userKey: "Benutzer-Schlüssel", appToken: "App-Token", link: "Zugangsdaten auf pushover.net ↗" },
+        button:   "Verschlüsseln & Shares erstellen",
+        results:  {
+          sharesTitle:     "Share-Pakete",
+          giveFile:        "Dieses Paket an {trustee} weitergeben",
+          downloadAll:     "Alle Pakete herunterladen",
+          downloadAllDesc: "Ein ZIP pro Treuhänder — jedes enthält den Share + die verschlüsselte Datei",
+          downloadPackage: "Paket herunterladen (ZIP)",
+          shareOnly:       "Nur Share-Datei"
+        }
+      },
+      decrypt: {
+        encFile: { title: "Verschlüsselte Datei", action: ".enc-Datei hier ablegen", hint: "oder klicken" },
+        shares:  { title: "Share-Dateien", action: "Share-Dateien hier ablegen", hint: "oder klicken — mehrere möglich" },
+        status:  { enough: "{loaded} von {k} benötigten Shares geladen — bereit", needMore: "{loaded} von {k} benötigt — noch {more} fehlen" },
+        button:  "Datei entschlüsseln",
+        success: { msg: "Datei erfolgreich entschlüsselt" }
+      },
+      progress: { encrypting: "Verschlüsseln…", decrypting: "Entschlüsseln…" },
+      validation: {
+        noFile:              "Bitte eine Datei zum Verschlüsseln auswählen.",
+        kGtN:                "k darf nicht größer als n sein.",
+        k1:                  "Warnung: k = 1 bedeutet, dass jeder einzelne Share die Datei entschlüsseln kann.",
+        nGt10:               "Warnung: Mehr als 10 Shares ist ungewöhnlich.",
+        kEqN:                "Alle {n} Shares werden zum Entschlüsseln benötigt.",
+        dupTrustee:          "Treuhänder-Namen müssen eindeutig sein.",
+        emptyTrustee:        "Alle Treuhänder-Namen müssen ausgefüllt sein.",
+        decNoEnc:            "Bitte die verschlüsselte .enc-Datei hochladen.",
+        decNotEnough:        "{k} Shares benötigt — {loaded} geladen.",
+        decInconsistentMeta: "Share-Dateien haben inkonsistente Salt- oder IV-Werte.",
+        decParseFail:        "Share-Datei konnte nicht gelesen werden: {name}"
+      }
+    }
+  };
+
+  let currentLang = 'en';
+
+  function t(keyPath, vars = {}) {
+    const keys = keyPath.split('.');
+    let val = i18n[currentLang];
+    for (const k of keys) val = val?.[k];
+    if (typeof val !== 'string') {
+      val = i18n.en;
+      for (const k of keys) val = val?.[k];
+    }
+    if (typeof val !== 'string') return keyPath;
+    return val.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : `{${k}}`));
+  }
+
+  // ============================================================
+  // 3. Shamir Secret Sharing
+  // ============================================================
+  function shamirSplit(secret, k, n) {
+    const shares = Array.from({ length: n }, () => new Uint8Array(32));
+    for (let b = 0; b < 32; b++) {
+      const coeff = new Uint8Array(k);
+      coeff[0] = secret[b];
+      if (k > 1) crypto.getRandomValues(coeff.subarray(1));
+      for (let i = 0; i < n; i++) {
+        const x = i + 1;
+        let y = 0;
+        for (let j = k - 1; j >= 0; j--) y = gfMul(y, x) ^ coeff[j];
+        shares[i][b] = y;
+      }
+    }
+    return shares;
+  }
+
+  function shamirReconstruct(shares) {
+    const k = shares.length;
+    const secret = new Uint8Array(32);
+    for (let b = 0; b < 32; b++) {
+      let result = 0;
+      for (let i = 0; i < k; i++) {
+        const xi = shares[i].x, yi = shares[i].data[b];
+        let num = yi, den = 1;
+        for (let j = 0; j < k; j++) {
+          if (i === j) continue;
+          const xj = shares[j].x;
+          num = gfMul(num, xj);
+          den = gfMul(den, xi ^ xj);
+        }
+        result ^= gfDiv(num, den);
+      }
+      secret[b] = result;
+    }
+    return secret;
+  }
+
+  // ============================================================
+  // 4. Web Crypto Helpers
+  // ============================================================
+  async function deriveKey(masterSecret, salt) {
+    const km = await crypto.subtle.importKey('raw', masterSecret, 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 200_000, hash: 'SHA-256' },
+      km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+    );
+  }
+
+  async function encryptData(data, key, iv) {
+    return new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data));
+  }
+
+  async function decryptData(ciphertext, key, iv) {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext));
+  }
+
+  // ============================================================
+  // 5. File I/O Helpers
+  // ============================================================
+  function readFileAsBytes(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(new Uint8Array(r.result));
+      r.onerror = rej;
+      r.readAsArrayBuffer(file);
+    });
+  }
+
+  function readFileAsText(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsText(file);
+    });
+  }
+
+  function downloadBlob(data, filename, type = 'application/octet-stream') {
+    const url = URL.createObjectURL(new Blob([data], { type }));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function toBase64(bytes) {
+    let s = '';
+    for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s);
+  }
+
+  function fromBase64(str) {
+    const s = atob(str);
+    const arr = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) arr[i] = s.charCodeAt(i);
+    return arr;
+  }
+
+  // ============================================================
+  // 5b. ZIP Builder (pure JS, no deps — stored, no compression)
+  // ============================================================
+  const _crcTable = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[i] = c;
+    }
+    return t;
+  })();
+
+  function crc32(data) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < data.length; i++) crc = _crcTable[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function buildZip(files) {
+    // files: [{name: string, data: Uint8Array}]
+    const enc = new TextEncoder();
+    const localParts = [];
+    const cdEntries  = [];
+    let offset = 0;
+
+    for (const file of files) {
+      const nameBytes = enc.encode(file.name);
+      const data = file.data;
+      const checksum = crc32(data);
+      const size = data.length;
+
+      // Local file header (30 bytes + name)
+      const lh = new ArrayBuffer(30 + nameBytes.length);
+      const lv = new DataView(lh);
+      lv.setUint32(0,  0x04034b50, true); // local file header signature
+      lv.setUint16(4,  20, true);         // version needed
+      lv.setUint16(6,  0, true);          // general purpose bit flag
+      lv.setUint16(8,  0, true);          // compression method: stored
+      lv.setUint16(10, 0, true);          // last mod time
+      lv.setUint16(12, 0, true);          // last mod date
+      lv.setUint32(14, checksum, true);   // CRC-32
+      lv.setUint32(18, size, true);       // compressed size
+      lv.setUint32(22, size, true);       // uncompressed size
+      lv.setUint16(26, nameBytes.length, true); // filename length
+      lv.setUint16(28, 0, true);          // extra field length
+      new Uint8Array(lh, 30).set(nameBytes);
+
+      localParts.push(new Uint8Array(lh), data);
+
+      // Central directory file header (46 bytes + name)
+      const cd = new ArrayBuffer(46 + nameBytes.length);
+      const cv = new DataView(cd);
+      cv.setUint32(0,  0x02014b50, true); // central directory file header signature
+      cv.setUint16(4,  20, true);         // version made by
+      cv.setUint16(6,  20, true);         // version needed
+      cv.setUint16(8,  0, true);          // general purpose bit flag
+      cv.setUint16(10, 0, true);          // compression method
+      cv.setUint16(12, 0, true);          // last mod time
+      cv.setUint16(14, 0, true);          // last mod date
+      cv.setUint32(16, checksum, true);   // CRC-32
+      cv.setUint32(20, size, true);       // compressed size
+      cv.setUint32(24, size, true);       // uncompressed size
+      cv.setUint16(28, nameBytes.length, true); // filename length
+      cv.setUint16(30, 0, true);          // extra field length
+      cv.setUint16(32, 0, true);          // file comment length
+      cv.setUint16(34, 0, true);          // disk number start
+      cv.setUint16(36, 0, true);          // internal file attributes
+      cv.setUint32(38, 0, true);          // external file attributes
+      cv.setUint32(42, offset, true);     // relative offset of local header
+      new Uint8Array(cd, 46).set(nameBytes);
+
+      cdEntries.push(new Uint8Array(cd));
+      offset += 30 + nameBytes.length + size;
+    }
+
+    const cdStart = offset;
+    const cdSize  = cdEntries.reduce((s, e) => s + e.length, 0);
+
+    // End of central directory record (22 bytes)
+    const eocd = new ArrayBuffer(22);
+    const ev   = new DataView(eocd);
+    ev.setUint32(0,  0x06054b50, true);    // end of central directory signature
+    ev.setUint16(4,  0, true);             // disk number
+    ev.setUint16(6,  0, true);             // start disk of central directory
+    ev.setUint16(8,  files.length, true);  // entries on this disk
+    ev.setUint16(10, files.length, true);  // total entries
+    ev.setUint32(12, cdSize, true);        // size of central directory
+    ev.setUint32(16, cdStart, true);       // offset of start of central directory
+    ev.setUint16(20, 0, true);             // comment length
+
+    const allParts = [...localParts, ...cdEntries, new Uint8Array(eocd)];
+    const totalSize = allParts.reduce((s, p) => s + p.length, 0);
+    const result = new Uint8Array(totalSize);
+    let pos = 0;
+    for (const p of allParts) { result.set(p, pos); pos += p.length; }
+    return result;
+  }
+
+  // ============================================================
+  // 6. App State
+  // ============================================================
+  const state = {
+    encFile: null,
+    trustees: ['Alice', 'Bob', 'Charlie'],
+    decEncFile: null,
+    decShares: [],
+    // post-encrypt
+    encBlob: null,
+    encBlobName: '',
+    shareBlobs: [],
+    // post-decrypt
+    decBlob: null,
+    decBlobName: ''
+  };
+
+  // ============================================================
+  // 7. Mode + Language
+  // ============================================================
+  function setMode(mode) {
+    document.getElementById('encrypt-section').style.display = mode === 'encrypt' ? '' : 'none';
+    document.getElementById('decrypt-section').style.display = mode === 'decrypt' ? '' : 'none';
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === mode));
+  }
+
+  function setLanguage(lang) {
+    currentLang = lang;
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    renderTrustees();
+    validate();
+    renderLoadedShares();
+  }
+
+  // ============================================================
+  // 8. Theme
+  // ============================================================
+  function applyTheme(theme) {
+    const btn = document.getElementById('btn-theme');
+    if (theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      if (btn) btn.textContent = '☀️';
+    } else if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      if (btn) btn.textContent = '🌙';
+    } else {
+      // auto: follow system
+      document.documentElement.removeAttribute('data-theme');
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (btn) btn.textContent = isDark ? '🌙' : '☀️';
+    }
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    localStorage.setItem('secretsplit-theme', next);
+    applyTheme(next);
+  }
+
+  // ============================================================
+  // 9. Trustee Management
+  // ============================================================
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderTrustees() {
+    const n = parseInt(document.getElementById('inp-n').value) || 3;
+    while (state.trustees.length < n) state.trustees.push('');
+    while (state.trustees.length > n) state.trustees.pop();
+
+    const container = document.getElementById('trustee-list');
+    container.innerHTML = '';
+    for (let i = 0; i < n; i++) {
+      const row = document.createElement('div');
+      row.className = 'trustee-row';
+      row.innerHTML = `<div class="trustee-index">${i + 1}</div>
+        <input type="text" value="${escHtml(state.trustees[i] || '')}" placeholder="${escHtml(t('encrypt.trustees.placeholder'))}" data-idx="${i}">`;
+      container.appendChild(row);
+      row.querySelector('input').addEventListener('input', e => {
+        state.trustees[i] = e.target.value;
+        validate();
+      });
+    }
+  }
+
+  // ============================================================
+  // 10. Validation
+  // ============================================================
+  function validate() {
+    const k = parseInt(document.getElementById('inp-k').value);
+    const n = parseInt(document.getElementById('inp-n').value);
+    const msgs = [];
+    let hasError = false;
+
+    if (!isNaN(k) && !isNaN(n)) {
+      if (k > n) { msgs.push({ type: 'error', text: t('validation.kGtN') }); hasError = true; }
+      if (k === 1) msgs.push({ type: 'warning', text: t('validation.k1') });
+      if (n > 10)  msgs.push({ type: 'warning', text: t('validation.nGt10') });
+      if (k === n && k > 1) msgs.push({ type: 'info', text: t('validation.kEqN', { n }) });
+    } else { hasError = true; }
+
+    const names = state.trustees.slice(0, n);
+    if (names.some(name => !name.trim())) {
+      msgs.push({ type: 'error', text: t('validation.emptyTrustee') }); hasError = true;
+    }
+    const lower = names.map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (new Set(lower).size < lower.length) {
+      msgs.push({ type: 'error', text: t('validation.dupTrustee') }); hasError = true;
+    }
+
+    renderValidationMessages('validation-messages', msgs);
+    document.getElementById('btn-encrypt').disabled = hasError || !state.encFile;
+    return !hasError;
+  }
+
+  function renderValidationMessages(id, msgs) {
+    const icons = { error: '✕', warning: '⚠', info: 'ℹ', success: '✓' };
+    document.getElementById(id).innerHTML = msgs.map(m =>
+      `<div class="msg msg-${m.type}"><span>${icons[m.type] || ''}</span><span>${escHtml(m.text)}</span></div>`
+    ).join('');
+  }
+
+  // ============================================================
+  // 11. Pushover — Credentials encryption/decryption + notify
+  // ============================================================
+  async function encryptPushoverCreds(creds, masterSecret) {
+    const iv  = crypto.getRandomValues(new Uint8Array(12));
+    const key = await crypto.subtle.importKey(
+      'raw', masterSecret, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
+    );
+    const pt = new TextEncoder().encode(JSON.stringify(creds));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt));
+    return { encrypted: toBase64(ct), iv: toBase64(iv) };
+  }
+
+  async function decryptPushoverCreds(encPushover, masterSecret) {
+    const key = await crypto.subtle.importKey(
+      'raw', masterSecret, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+    );
+    const ct = fromBase64(encPushover.encrypted);
+    const iv = fromBase64(encPushover.iv);
+    const pt = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+
+  async function notifyPushover(userKey, appToken, trustee, filename) {
+    if (!userKey || !appToken) return;
+    try {
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: appToken, user: userKey,
+          title: 'SecretSplit Notification',
+          message: `SecretSplit: ${trustee} decrypted '${filename}' at ${new Date().toISOString()}`
+        })
+      });
+    } catch (_) { /* intentionally silent */ }
+  }
+
+  // Alert credentials are encrypted with the share's own 32-byte data as AES-256 key.
+  // The share holder has the key (= their share data), so they can technically decrypt it,
+  // but credentials are not in plaintext in the JSON.
+  async function encryptAlertCredsForShare(creds, shareData) {
+    const iv  = crypto.getRandomValues(new Uint8Array(12));
+    const key = await crypto.subtle.importKey('raw', shareData, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+    const pt  = new TextEncoder().encode(JSON.stringify(creds));
+    const ct  = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt));
+    return { encrypted: toBase64(ct), iv: toBase64(iv) };
+  }
+
+  async function fireAlertNotification(alertPushover, shareData, eventMsg, filename) {
+    try {
+      const key = await crypto.subtle.importKey('raw', shareData, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+      const ct  = fromBase64(alertPushover.encrypted);
+      const iv  = fromBase64(alertPushover.iv);
+      const pt  = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
+      const creds = JSON.parse(new TextDecoder().decode(pt));
+      if (!creds?.userKey || !creds?.appToken) return;
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: creds.appToken, user: creds.userKey,
+          title: 'SecretSplit Alert',
+          message: `${eventMsg} — file: '${filename}' — ${new Date().toISOString()}`
+        })
+      });
+    } catch (_) { /* intentionally silent */ }
+  }
+
+  // ============================================================
+  // 12. Encrypt Workflow
+  // ============================================================
+  async function handleEncrypt() {
+    if (!state.encFile) return;
+    const k = parseInt(document.getElementById('inp-k').value);
+    const n = parseInt(document.getElementById('inp-n').value);
+    const trustees = state.trustees.slice(0, n).map(s => s.trim());
+    const pushoverUser  = document.getElementById('inp-pushover-user').value.trim();
+    const pushoverToken = document.getElementById('inp-pushover-token').value.trim();
+
+    const btn = document.getElementById('btn-encrypt');
+    btn.disabled = true;
+    document.getElementById('enc-progress').classList.add('visible');
+    document.getElementById('enc-results').classList.remove('visible');
+
+    try {
+      const fileData = await readFileAsBytes(state.encFile);
+      const filename  = state.encFile.name;
+
+      const masterSecret = crypto.getRandomValues(new Uint8Array(32));
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv   = crypto.getRandomValues(new Uint8Array(12));
+
+      const aesKey    = await deriveKey(masterSecret, salt);
+      const ciphertext = await encryptData(fileData, aesKey, iv);
+      const rawShares  = shamirSplit(masterSecret, k, n);
+
+      const saltB64 = toBase64(salt);
+      const ivB64   = toBase64(iv);
+
+      // Encrypt pushover credentials with masterSecret — trustees cannot read them
+      const pushoverEnc = (pushoverUser && pushoverToken)
+        ? await encryptPushoverCreds({ userKey: pushoverUser, appToken: pushoverToken }, masterSecret)
+        : null;
+
+      state.encBlob = ciphertext;
+      state.encBlobName = filename + '.enc';
+      state.shareBlobs  = [];
+
+      for (let i = 0; i < n; i++) {
+        const alertPushoverEnc = (pushoverUser && pushoverToken)
+          ? await encryptAlertCredsForShare({ userKey: pushoverUser, appToken: pushoverToken }, rawShares[i])
+          : null;
+        const shareObj = {
+          version: 1, app: 'SecretSplit',
+          trustee: trustees[i], shareIndex: i + 1, k, n,
+          shareData: toBase64(rawShares[i]),
+          salt: saltB64, iv: ivB64, filename,
+          pushover: pushoverEnc,
+          alertPushover: alertPushoverEnc
+        };
+        const name = `share_${trustees[i].toLowerCase().replace(/\s+/g, '_')}.txt`;
+        state.shareBlobs.push({ name, data: JSON.stringify(shareObj, null, 2), trustee: trustees[i], index: i + 1 });
+      }
+
+      renderEncryptResults();
+    } catch (err) {
+      console.error(err);
+      renderValidationMessages('validation-messages', [{ type: 'error', text: err.message || 'Encryption failed' }]);
+    } finally {
+      document.getElementById('enc-progress').classList.remove('visible');
+      btn.disabled = false;
+      validate();
+    }
+  }
+
+  function buildDecryptOnlyHtml() {
+    let html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    // Inject before the LAST </body> — using lastIndexOf avoids replacing the
+    // '</body>' string literal that also appears inside the JS source code.
+    const injection =
+      '<style>.tab-btn[data-tab="encrypt"]{display:none!important}</style>\n' +
+      '<script>document.addEventListener("DOMContentLoaded",function(){setMode("decrypt");});<\/script>';
+    const idx = html.lastIndexOf('</body>');
+    if (idx !== -1) html = html.slice(0, idx) + injection + '\n</body>';
+    return new TextEncoder().encode(html);
+  }
+
+  function buildTrusteePackage(share) {
+    return buildZip([
+      { name: share.name,        data: new TextEncoder().encode(share.data) },
+      { name: state.encBlobName, data: state.encBlob },
+      { name: 'index.html',      data: buildDecryptOnlyHtml() }
+    ]);
+  }
+
+  function buildMasterPackage() {
+    const entries = state.shareBlobs.map(share => {
+      const treeName = share.trustee.toLowerCase().replace(/\s+/g, '_');
+      return { name: `package_${treeName}.zip`, data: buildTrusteePackage(share) };
+    });
+    return buildZip(entries);
+  }
+
+  function renderEncryptResults() {
+    document.getElementById('enc-download-name').textContent = state.encBlobName;
+    document.getElementById('btn-enc-download').onclick = () => downloadBlob(state.encBlob, state.encBlobName);
+
+    document.getElementById('btn-download-all').onclick = () => {
+      const masterZip = buildMasterPackage();
+      const baseName = state.encBlobName.replace(/\.enc$/, '');
+      downloadBlob(masterZip, `secretsplit_${baseName}_all_packages.zip`, 'application/zip');
+    };
+
+    const container = document.getElementById('share-cards-container');
+    container.innerHTML = '';
+    for (const share of state.shareBlobs) {
+      const card = document.createElement('div');
+      card.className = 'share-card';
+      card.innerHTML = `
+        <div class="share-card-header">
+          <div class="share-badge">${share.index}</div>
+          <div class="share-card-name">${escHtml(share.trustee)}</div>
+        </div>
+        <div class="share-card-instr">${escHtml(t('encrypt.results.giveFile', { trustee: share.trustee }))}</div>
+        <div class="share-card-actions">
+          <button class="btn-share-zip">📦 ${escHtml(t('encrypt.results.downloadPackage'))}</button>
+          <button class="btn-share-only">${escHtml(t('encrypt.results.shareOnly'))}</button>
+        </div>`;
+      card.querySelector('.btn-share-zip').addEventListener('click', () => {
+        const zip = buildTrusteePackage(share);
+        const treeName = share.trustee.toLowerCase().replace(/\s+/g, '_');
+        downloadBlob(zip, `package_${treeName}.zip`, 'application/zip');
+      });
+      card.querySelector('.btn-share-only').addEventListener('click', () =>
+        downloadBlob(share.data, share.name, 'application/json'));
+      container.appendChild(card);
+    }
+
+    document.getElementById('enc-results').classList.add('visible');
+  }
+
+  // ============================================================
+  // 13. Decrypt Workflow
+  // ============================================================
+  function renderLoadedShares() {
+    const container = document.getElementById('loaded-shares-container');
+    if (state.decShares.length === 0) { container.style.display = 'none'; updateDecryptButton(); return; }
+
+    container.style.display = '';
+    const list = document.getElementById('loaded-shares-list');
+    list.innerHTML = '';
+    for (const s of state.decShares) {
+      const item = document.createElement('div');
+      item.className = 'loaded-share-item';
+      item.innerHTML = `<span>🗝️ ${escHtml(s.trustee)}</span><span class="share-index-badge">#${s.shareIndex}</span>`;
+      list.appendChild(item);
+    }
+
+    const k = state.decShares[0]?.k;
+    const loaded = state.decShares.length;
+    const status = document.getElementById('share-count-status');
+    if (loaded >= k) {
+      status.className = 'share-count-status enough';
+      status.textContent = t('decrypt.status.enough', { loaded, k });
+    } else {
+      status.className = 'share-count-status need-more';
+      status.textContent = t('decrypt.status.needMore', { loaded, k, more: k - loaded });
+    }
+
+    updateDecryptButton();
+  }
+
+  function updateDecryptButton() {
+    const k = state.decShares[0]?.k;
+    document.getElementById('btn-decrypt').disabled =
+      !state.decEncFile || !k || state.decShares.length < k;
+  }
+
+  async function handleDecrypt() {
+    document.getElementById('btn-decrypt').disabled = true;
+    document.getElementById('dec-progress').classList.add('visible');
+    document.getElementById('dec-success').classList.remove('visible');
+
+    try {
+      const shares = state.decShares;
+      const salt0 = shares[0].salt, iv0 = shares[0].iv;
+
+      if (!shares.every(s => s.salt === salt0 && s.iv === iv0)) {
+        renderValidationMessages('dec-validation-messages',
+          [{ type: 'error', text: t('validation.decInconsistentMeta') }]);
+        return;
+      }
+
+      const masterSecret = shamirReconstruct(
+        shares.map(s => ({ x: s.shareIndex, data: fromBase64(s.shareData) }))
+      );
+
+      const aesKey    = await deriveKey(masterSecret, fromBase64(salt0));
+      const encData   = await readFileAsBytes(state.decEncFile);
+      const plaintext = await decryptData(encData, aesKey, fromBase64(iv0));
+
+      const filename = shares[0].filename || 'decrypted_file';
+      state.decBlob = plaintext;
+      state.decBlobName = filename;
+
+      document.getElementById('dec-success-filename').textContent = filename;
+      document.getElementById('btn-dec-download').onclick = () =>
+        downloadBlob(state.decBlob, state.decBlobName);
+      document.getElementById('dec-success').classList.add('visible');
+
+      // Decrypt pushover credentials and fire notification silently
+      const po = shares[0].pushover;
+      if (po?.encrypted) {
+        try {
+          const creds = await decryptPushoverCreds(po, masterSecret);
+          if (creds?.userKey && creds?.appToken)
+            notifyPushover(creds.userKey, creds.appToken, shares[0].trustee, filename);
+        } catch (_) { /* intentionally silent */ }
+      }
+
+      renderValidationMessages('dec-validation-messages', []);
+    } catch (err) {
+      console.error(err);
+      const msg = (err.name === 'OperationError')
+        ? 'Decryption failed — wrong shares or corrupted file.'
+        : (err.message || 'Decryption failed');
+      renderValidationMessages('dec-validation-messages', [{ type: 'error', text: msg }]);
+      // Alert: decryption attempt failed (wrong shares or corrupted file)
+      const firstShare = state.decShares[0];
+      if (firstShare?.alertPushover) {
+        fireAlertNotification(
+          firstShare.alertPushover,
+          fromBase64(firstShare.shareData),
+          `🚨 Decryption FAILED — ${state.decShares.length} share(s) used by ${firstShare.trustee}`,
+          firstShare.filename || '(unknown file)'
+        );
+      }
+    } finally {
+      document.getElementById('dec-progress').classList.remove('visible');
+      updateDecryptButton();
+    }
+  }
+
+  // ============================================================
+  // 14. Drag & Drop Setup
+  // ============================================================
+  function setupDropzone(zoneId, inputId, onFiles, multiple = false) {
+    const zone  = document.getElementById(zoneId);
+    const input = document.getElementById(inputId);
+    input.multiple = multiple;
+
+    input.addEventListener('change', e => {
+      if (e.target.files.length) onFiles(Array.from(e.target.files));
+      input.value = '';
+    });
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length) onFiles(files);
+    });
+  }
+
+  // ============================================================
+  // 15. DOMContentLoaded Init
+  // ============================================================
+  document.addEventListener('DOMContentLoaded', () => {
+    // Theme
+    const savedTheme = localStorage.getItem('secretsplit-theme');
+    applyTheme(savedTheme || null);
+    document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+
+    // Language
+    document.querySelectorAll('.lang-btn').forEach(b =>
+      b.addEventListener('click', () => setLanguage(b.dataset.lang)));
+
+    // Tabs
+    document.querySelectorAll('.tab-btn').forEach(b =>
+      b.addEventListener('click', () => setMode(b.dataset.tab)));
+
+    // k/n inputs
+    document.getElementById('inp-k').addEventListener('input', validate);
+    document.getElementById('inp-n').addEventListener('input', () => { renderTrustees(); validate(); });
+
+    // Encrypt file
+    setupDropzone('enc-dropzone', 'enc-file-input', ([file]) => {
+      state.encFile = file;
+      document.getElementById('enc-file-display').style.display = 'flex';
+      document.getElementById('enc-file-name').textContent = file.name;
+      validate();
+    });
+
+    document.getElementById('btn-encrypt').addEventListener('click', handleEncrypt);
+
+    // Decrypt .enc file
+    setupDropzone('dec-enc-dropzone', 'dec-enc-file-input', ([file]) => {
+      state.decEncFile = file;
+      document.getElementById('dec-enc-display').style.display = 'flex';
+      document.getElementById('dec-enc-name').textContent = file.name;
+      updateDecryptButton();
+    });
+
+    // Decrypt share files
+    setupDropzone('dec-share-dropzone', 'dec-share-input', async (files) => {
+      const msgs = [];
+      for (const file of files) {
+        try {
+          const parsed = JSON.parse(await readFileAsText(file));
+          if (parsed.app !== 'SecretSplit' || !parsed.shareData)
+            throw new Error('not a SecretSplit share');
+          if (!state.decShares.find(s => s.shareIndex === parsed.shareIndex && s.salt === parsed.salt))
+            state.decShares.push(parsed);
+        } catch (_) {
+          msgs.push({ type: 'error', text: t('validation.decParseFail', { name: file.name }) });
+        }
+      }
+      renderValidationMessages('dec-validation-messages', msgs);
+      renderLoadedShares();
+    }, true);
+
+    document.getElementById('btn-decrypt').addEventListener('click', handleDecrypt);
+
+    // Initial render
+    renderTrustees();
+    validate();
+  });
+  </script>
+</body>
+</html>

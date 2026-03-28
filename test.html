@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecretSplit — Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #080814; --surface: rgba(255,255,255,0.05); --border: rgba(255,255,255,0.10);
+      --text: #f1f5f9; --text-muted: #94a3b8;
+      --success: #22c55e; --error: #ef4444; --warning: #f59e0b; --accent1: #7c3aed; --accent2: #3b82f6;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 40px 24px; max-width: 820px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; background: linear-gradient(135deg, var(--accent1), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 32px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead th { text-align: left; padding: 10px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    td { padding: 12px 14px; vertical-align: top; }
+    td:first-child { width: 36px; text-align: center; font-weight: 700; color: var(--text-muted); }
+    td.name { font-weight: 500; }
+    td.status { width: 90px; font-size: 12px; font-weight: 700; }
+    td.detail { font-size: 12px; color: var(--text-muted); font-family: monospace; }
+    .pass  { color: var(--success); }
+    .fail  { color: var(--error); }
+    .run   { color: var(--warning); }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 700; }
+    .badge-pass { background: rgba(34,197,94,0.15); color: var(--success); }
+    .badge-fail { background: rgba(239,68,68,0.15); color: var(--error); }
+    .badge-run  { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .summary { margin-top: 24px; font-size: 14px; color: var(--text-muted); }
+    .summary strong { color: var(--text); }
+  </style>
+</head>
+<body>
+  <h1>🔐 SecretSplit — Test Suite</h1>
+  <p class="subtitle">7 unit tests · GF(256) arithmetic · Shamir SSS · Web Crypto</p>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Test</th><th>Status</th><th>Detail</th></tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+  <p class="summary" id="summary"></p>
+
+  <script>
+  // ── GF(256) (same as index.html) ────────────────────────────
+  const gfExp = new Uint8Array(512);
+  const gfLog = new Uint8Array(256);
+  {
+    let x = 1;
+    for (let i = 0; i < 255; i++) {
+      gfExp[i] = x; gfLog[x] = i;
+      // Generator α=3 (=x+1): multiply x by 3 = xtime(x) XOR x
+      const xt = ((x << 1) ^ ((x & 0x80) ? 0x1b : 0)) & 0xff;
+      x = xt ^ x;
+    }
+    for (let i = 255; i < 512; i++) gfExp[i] = gfExp[i - 255];
+  }
+  const gfMul = (a, b) => (a && b) ? gfExp[gfLog[a] + gfLog[b]] : 0;
+  const gfDiv = (a, b) => a ? gfExp[(gfLog[a] - gfLog[b] + 255) % 255] : 0;
+
+  // ── Shamir (same as index.html) ─────────────────────────────
+  function shamirSplit(secret, k, n) {
+    const shares = Array.from({ length: n }, () => new Uint8Array(32));
+    for (let b = 0; b < 32; b++) {
+      const coeff = new Uint8Array(k);
+      coeff[0] = secret[b];
+      if (k > 1) crypto.getRandomValues(coeff.subarray(1));
+      for (let i = 0; i < n; i++) {
+        const x = i + 1;
+        let y = 0;
+        for (let j = k - 1; j >= 0; j--) y = gfMul(y, x) ^ coeff[j];
+        shares[i][b] = y;
+      }
+    }
+    return shares;
+  }
+
+  function shamirReconstruct(shares) {
+    const k = shares.length;
+    const secret = new Uint8Array(32);
+    for (let b = 0; b < 32; b++) {
+      let result = 0;
+      for (let i = 0; i < k; i++) {
+        const xi = shares[i].x, yi = shares[i].data[b];
+        let num = yi, den = 1;
+        for (let j = 0; j < k; j++) {
+          if (i === j) continue;
+          const xj = shares[j].x;
+          num = gfMul(num, xj); den = gfMul(den, xi ^ xj);
+        }
+        result ^= gfDiv(num, den);
+      }
+      secret[b] = result;
+    }
+    return secret;
+  }
+
+  // ── Web Crypto helpers ───────────────────────────────────────
+  async function deriveKey(masterSecret, salt) {
+    const km = await crypto.subtle.importKey('raw', masterSecret, 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 200_000, hash: 'SHA-256' },
+      km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+    );
+  }
+
+  async function encryptData(data, key, iv) {
+    return new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data));
+  }
+  async function decryptData(ct, key, iv) {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────
+  function arrEq(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+  function randomSecret() { return crypto.getRandomValues(new Uint8Array(32)); }
+
+  // ── Test runner ──────────────────────────────────────────────
+  const tbody  = document.getElementById('results');
+  const summary = document.getElementById('summary');
+  let passed = 0, failed = 0;
+
+  function row(num, name) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${num}</td><td class="name">${name}</td>
+      <td class="status"><span class="badge badge-run">running</span></td>
+      <td class="detail" id="d${num}">…</td>`;
+    tbody.appendChild(tr);
+    return {
+      pass(detail = '') {
+        passed++;
+        tr.querySelector('.badge').className = 'badge badge-pass';
+        tr.querySelector('.badge').textContent = 'PASS';
+        document.getElementById('d' + num).textContent = detail;
+        updateSummary();
+      },
+      fail(detail = '') {
+        failed++;
+        tr.querySelector('.badge').className = 'badge badge-fail';
+        tr.querySelector('.badge').textContent = 'FAIL';
+        document.getElementById('d' + num).textContent = detail;
+        document.getElementById('d' + num).style.color = 'var(--error)';
+        updateSummary();
+      }
+    };
+  }
+
+  function updateSummary() {
+    summary.innerHTML = `<strong>${passed + failed}</strong> tests run &nbsp;·&nbsp; <strong style="color:var(--success)">${passed} passed</strong> &nbsp;·&nbsp; <strong style="color:var(--error)">${failed} failed</strong>`;
+  }
+
+  async function runTests() {
+    // ── Test 1: GF(256) known values ────────────────────────────
+    {
+      const t1 = row(1, 'GF(256) multiply — known values');
+      try {
+        const checks = [
+          [gfMul(3, 7), 9,   'gfMul(3,7) === 9'],
+          [gfMul(0, 5), 0,   'gfMul(0,5) === 0'],
+          [gfDiv(1, 1), 1,   'gfDiv(1,1) === 1'],
+          [gfMul(2, 2), 4,   'gfMul(2,2) === 4'],
+          [gfMul(128, 2), 27,'gfMul(128,2) === 27 (reduction via 0x11b)'],
+          [gfDiv(0, 5), 0,   'gfDiv(0,5) === 0'],
+        ];
+        const failures = checks.filter(([got, want]) => got !== want)
+          .map(([got, want, label]) => `${label} (got ${got})`);
+        if (failures.length === 0) t1.pass('gfMul(3,7)=9  gfMul(0,5)=0  gfDiv(1,1)=1  gfMul(128,2)=27');
+        else t1.fail(failures.join('; '));
+      } catch (e) { t1.fail(e.message); }
+    }
+
+    // ── Test 2: Shamir 2-of-3 roundtrip ─────────────────────────
+    {
+      const t2 = row(2, 'Shamir 2-of-3 — reconstruct from any 2 of 3 shares');
+      try {
+        const secret = randomSecret();
+        const rawShares = shamirSplit(secret, 2, 3);
+        const pairs = [[0,1],[0,2],[1,2]];
+        const failures = [];
+        for (const [i, j] of pairs) {
+          const recon = shamirReconstruct([
+            { x: i+1, data: rawShares[i] },
+            { x: j+1, data: rawShares[j] }
+          ]);
+          if (!arrEq(recon, secret)) failures.push(`pair (${i+1},${j+1}) failed`);
+        }
+        if (failures.length === 0) t2.pass('All 3 pairs reconstructed correctly');
+        else t2.fail(failures.join('; '));
+      } catch (e) { t2.fail(e.message); }
+    }
+
+    // ── Test 3: Shamir 3-of-5 roundtrip ─────────────────────────
+    {
+      const t3 = row(3, 'Shamir 3-of-5 — reconstruct from 5 distinct 3-combinations');
+      try {
+        const secret = randomSecret();
+        const rawShares = shamirSplit(secret, 3, 5);
+        // Test a representative subset of 3-combos
+        const combos = [[0,1,2],[0,1,3],[0,2,4],[1,3,4],[2,3,4]];
+        const failures = [];
+        for (const trio of combos) {
+          const recon = shamirReconstruct(trio.map(i => ({ x: i+1, data: rawShares[i] })));
+          if (!arrEq(recon, secret)) failures.push(`[${trio.map(i=>i+1)}]`);
+        }
+        if (failures.length === 0) t3.pass('5 of 5 sampled 3-combinations correct');
+        else t3.fail('Failed combos: ' + failures.join(', '));
+      } catch (e) { t3.fail(e.message); }
+    }
+
+    // ── Test 4: Shamir 1-of-1 roundtrip ─────────────────────────
+    {
+      const t4 = row(4, 'Shamir 1-of-1 — trivial single-share case');
+      try {
+        const secret = randomSecret();
+        const rawShares = shamirSplit(secret, 1, 1);
+        const recon = shamirReconstruct([{ x: 1, data: rawShares[0] }]);
+        if (arrEq(recon, secret)) t4.pass('1-of-1 reconstructed correctly');
+        else t4.fail('Reconstructed secret does not match');
+      } catch (e) { t4.fail(e.message); }
+    }
+
+    // ── Test 5: Under-threshold failure ──────────────────────────
+    {
+      const t5 = row(5, 'Under-threshold — 1 share of 2-of-3 does NOT reproduce secret');
+      try {
+        const secret = randomSecret();
+        const rawShares = shamirSplit(secret, 2, 3);
+        // Using 1 share with Lagrange gives f(x_0), not f(0) — should differ
+        let mismatchCount = 0;
+        for (let i = 0; i < 3; i++) {
+          const wrong = shamirReconstruct([{ x: i+1, data: rawShares[i] }]);
+          if (!arrEq(wrong, secret)) mismatchCount++;
+        }
+        if (mismatchCount === 3)
+          t5.pass('All 3 individual shares produce wrong secret (as expected)');
+        else
+          t5.fail(`Only ${mismatchCount}/3 shares gave wrong output — coincidental match?`);
+      } catch (e) { t5.fail(e.message); }
+    }
+
+    // ── Test 6: AES-256-GCM roundtrip ────────────────────────────
+    {
+      const t6 = row(6, 'AES-256-GCM roundtrip — encrypt → decrypt = original');
+      try {
+        const master = crypto.getRandomValues(new Uint8Array(32));
+        const salt   = crypto.getRandomValues(new Uint8Array(16));
+        const iv     = crypto.getRandomValues(new Uint8Array(12));
+        const plain  = crypto.getRandomValues(new Uint8Array(256));
+
+        const key        = await deriveKey(master, salt);
+        const ciphertext = await encryptData(plain, key, iv);
+        const decrypted  = await decryptData(ciphertext, key, iv);
+
+        if (arrEq(plain, decrypted))
+          t6.pass(`256 random bytes encrypted (→ ${ciphertext.length}B with tag) and decrypted correctly`);
+        else
+          t6.fail('Decrypted output does not match original plaintext');
+      } catch (e) { t6.fail(e.message); }
+    }
+
+    // ── Test 7: PBKDF2 determinism ───────────────────────────────
+    {
+      const t7 = row(7, 'PBKDF2 determinism — same master + salt yields identical key');
+      try {
+        const master = crypto.getRandomValues(new Uint8Array(32));
+        const salt   = crypto.getRandomValues(new Uint8Array(16));
+        const iv     = crypto.getRandomValues(new Uint8Array(12));
+        const plain  = new Uint8Array([1, 2, 3, 4, 5]);
+
+        // Derive key twice from identical inputs
+        const key1 = await deriveKey(master, salt);
+        const key2 = await deriveKey(master, salt);
+
+        // Encrypt same plaintext with same IV — ciphertexts must be identical
+        const ct1 = await encryptData(plain, key1, iv);
+        const ct2 = await encryptData(plain, key2, iv);
+
+        if (arrEq(ct1, ct2))
+          t7.pass('Two independently derived keys produce identical ciphertexts');
+        else
+          t7.fail('Keys differed — PBKDF2 is not deterministic (unexpected)');
+      } catch (e) { t7.fail(e.message); }
+    }
+  }
+
+  runTests();
+  </script>
+</body>
+</html>
