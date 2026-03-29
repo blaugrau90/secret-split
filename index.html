@@ -391,7 +391,8 @@
             <input type="password" id="inp-pushover-token" placeholder="aXXXXXXXX…">
           </div>
         </div>
-        <a href="https://pushover.net" target="_blank" rel="noopener" class="pushover-link" data-i18n="encrypt.pushover.link">Get credentials at pushover.net ↗</a>
+        <a href="https://pushover.net" target="_blank" rel="noopener noreferrer" class="pushover-link" data-i18n="encrypt.pushover.link">Get credentials at pushover.net ↗</a>
+        <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;line-height:1.4" data-i18n="encrypt.pushover.alertNote">Note: Each trustee can independently trigger alert notifications. Success notifications require k shares. File name, trustee name, and timestamp are sent to Pushover (metadata not zero-knowledge).</p>
       </div>
 
       <!-- Encrypt button -->
@@ -521,7 +522,7 @@
         dropzone: { action: "Drop file here", hint: "or click to select — any file type" },
         shares:   { title: "Share Configuration", kLabel: "Required Shares (k)", nLabel: "Total Shares (n)" },
         trustees: { label: "Trustees", placeholder: "Trustee name" },
-        pushover: { title: "Pushover Notifications", userKey: "User Key", appToken: "App Token", link: "Get credentials at pushover.net ↗" },
+        pushover: { title: "Pushover Notifications", userKey: "User Key", appToken: "App Token", link: "Get credentials at pushover.net ↗", alertNote: "Note: Each trustee can independently trigger alert notifications. Success notifications require k shares. File name, trustee name, and timestamp are sent to Pushover (metadata not zero-knowledge)." },
         button:   "Encrypt & Generate Shares",
         results:  {
           sharesTitle:     "Share Packages",
@@ -562,7 +563,7 @@
         dropzone: { action: "Datei hier ablegen", hint: "oder klicken — jedes Dateiformat" },
         shares:   { title: "Shares konfigurieren", kLabel: "Benötigte Shares (k)", nLabel: "Gesamte Shares (n)" },
         trustees: { label: "Treuhänder", placeholder: "Name des Treuhänders" },
-        pushover: { title: "Pushover-Benachrichtigungen", userKey: "Benutzer-Schlüssel", appToken: "App-Token", link: "Zugangsdaten auf pushover.net ↗" },
+        pushover: { title: "Pushover-Benachrichtigungen", userKey: "Benutzer-Schlüssel", appToken: "App-Token", link: "Zugangsdaten auf pushover.net ↗", alertNote: "Hinweis: Jeder Treuhänder kann eigenständig Alert-Benachrichtigungen auslösen. Success-Benachrichtigungen erfordern k Shares. Dateiname, Treuhändername und Zeitstempel werden an Pushover gesendet (Metadaten nicht Zero-Knowledge)." },
         button:   "Verschlüsseln & Shares erstellen",
         results:  {
           sharesTitle:     "Share-Pakete",
@@ -626,6 +627,7 @@
         for (let j = k - 1; j >= 0; j--) y = gfMul(y, x) ^ coeff[j];
         shares[i][b] = y;
       }
+      coeff.fill(0);
     }
     return shares;
   }
@@ -874,8 +876,12 @@
   // ============================================================
   // 9. Trustee Management
   // ============================================================
+  function sanitizeFilename(s) {
+    return String(s).toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '') || 'unnamed';
+  }
+
   function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
   function renderTrustees() {
@@ -1020,17 +1026,18 @@
     document.getElementById('enc-progress').classList.add('visible');
     document.getElementById('enc-results').classList.remove('visible');
 
+    let masterSecret, rawShares;
     try {
       const fileData = await readFileAsBytes(state.encFile);
       const filename  = state.encFile.name;
 
-      const masterSecret = crypto.getRandomValues(new Uint8Array(32));
+      masterSecret = crypto.getRandomValues(new Uint8Array(32));
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iv   = crypto.getRandomValues(new Uint8Array(12));
 
       const aesKey    = await deriveKey(masterSecret, salt);
       const ciphertext = await encryptData(fileData, aesKey, iv);
-      const rawShares  = shamirSplit(masterSecret, k, n);
+      rawShares  = shamirSplit(masterSecret, k, n);
 
       const saltB64 = toBase64(salt);
       const ivB64   = toBase64(iv);
@@ -1056,7 +1063,7 @@
           pushover: pushoverEnc,
           alertPushover: alertPushoverEnc
         };
-        const name = `share_${trustees[i].toLowerCase().replace(/\s+/g, '_')}.txt`;
+        const name = `share_${sanitizeFilename(trustees[i])}.txt`;
         state.shareBlobs.push({ name, data: JSON.stringify(shareObj, null, 2), trustee: trustees[i], index: i + 1 });
       }
 
@@ -1065,6 +1072,8 @@
       console.error(err);
       renderValidationMessages('validation-messages', [{ type: 'error', text: err.message || 'Encryption failed' }]);
     } finally {
+      if (masterSecret) masterSecret.fill(0);
+      if (rawShares) rawShares.forEach(s => s.fill(0));
       document.getElementById('enc-progress').classList.remove('visible');
       btn.disabled = false;
       validate();
@@ -1072,7 +1081,11 @@
   }
 
   function buildDecryptOnlyHtml() {
+    // Clear sensitive inputs before DOM serialization to prevent credential leakage
+    const sensitiveInputs = document.querySelectorAll('#inp-pushover-user, #inp-pushover-token, input[type="password"]');
+    const savedValues = [...sensitiveInputs].map(el => { const v = el.value; el.value = ''; return v; });
     let html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    sensitiveInputs.forEach((el, i) => el.value = savedValues[i]);
     // Inject before the LAST </body> — using lastIndexOf avoids replacing the
     // '</body>' string literal that also appears inside the JS source code.
     const injection =
@@ -1093,7 +1106,7 @@
 
   function buildMasterPackage() {
     const entries = state.shareBlobs.map(share => {
-      const treeName = share.trustee.toLowerCase().replace(/\s+/g, '_');
+      const treeName = sanitizeFilename(share.trustee);
       return { name: `package_${treeName}.zip`, data: buildTrusteePackage(share) };
     });
     return buildZip(entries);
@@ -1126,7 +1139,7 @@
         </div>`;
       card.querySelector('.btn-share-zip').addEventListener('click', () => {
         const zip = buildTrusteePackage(share);
-        const treeName = share.trustee.toLowerCase().replace(/\s+/g, '_');
+        const treeName = sanitizeFilename(share.trustee);
         downloadBlob(zip, `package_${treeName}.zip`, 'application/zip');
       });
       card.querySelector('.btn-share-only').addEventListener('click', () =>
@@ -1179,6 +1192,7 @@
     document.getElementById('dec-progress').classList.add('visible');
     document.getElementById('dec-success').classList.remove('visible');
 
+    let masterSecret;
     try {
       const shares = state.decShares;
       const salt0 = shares[0].salt, iv0 = shares[0].iv;
@@ -1189,7 +1203,10 @@
         return;
       }
 
-      const masterSecret = shamirReconstruct(
+      const indices = shares.map(s => s.shareIndex);
+      if (new Set(indices).size < indices.length) throw new Error('Duplicate share indices detected');
+
+      masterSecret = shamirReconstruct(
         shares.map(s => ({ x: s.shareIndex, data: fromBase64(s.shareData) }))
       );
 
@@ -1202,8 +1219,10 @@
       state.decBlobName = filename;
 
       document.getElementById('dec-success-filename').textContent = filename;
-      document.getElementById('btn-dec-download').onclick = () =>
+      document.getElementById('btn-dec-download').onclick = () => {
         downloadBlob(state.decBlob, state.decBlobName);
+        state.decBlob = null;
+      };
       document.getElementById('dec-success').classList.add('visible');
 
       // Decrypt pushover credentials and fire notification silently
@@ -1234,6 +1253,7 @@
         );
       }
     } finally {
+      if (masterSecret) masterSecret.fill(0);
       document.getElementById('dec-progress').classList.remove('visible');
       updateDecryptButton();
     }
